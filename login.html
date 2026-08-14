@@ -1,8 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>J2Grows · Sign in</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -11,94 +10,41 @@
 </head>
 <body>
 <main class="shell">
-<div class="logo">🌱</div>
-<div class="ey">J2GROWS COMMAND CENTRE</div>
-<div class="title" id="title">Create your database</div>
-<div class="sub" id="sub">Create an account and name your private plant database.</div>
-<div class="tabs">
-<button type="button" class="tab active" id="signupTab">Create account</button>
-<button type="button" class="tab" id="loginTab">Sign in</button>
-</div>
+<div class="logo">🌱</div><div class="ey">J2GROWS COMMAND CENTRE</div>
+<div class="title" id="title">Create your database</div><div class="sub" id="sub">Create an account and name your private plant database.</div>
+<div class="tabs"><button type="button" class="tab active" id="signupTab">Create account</button><button type="button" class="tab" id="loginTab">Sign in</button></div>
 <form id="form" novalidate>
 <div class="field" id="dbWrap"><label for="db">Database name</label><input class="input" id="db" autocomplete="organization" placeholder="e.g. Joe's Plant Database" maxlength="60"></div>
 <div class="field"><label for="email">Email</label><input class="input" id="email" type="email" autocomplete="email" placeholder="you@example.com"></div>
 <div class="field"><label for="password">Password</label><input class="input" id="password" type="password" autocomplete="current-password" placeholder="At least 6 characters"></div>
 <button class="submit" id="submit" type="submit">Create my database</button>
-<div class="message error" id="error"></div>
-<div class="message success" id="success"></div>
+<div class="message error" id="error"></div><div class="message success" id="success"></div>
 </form>
-<div class="status" id="status">Connecting to J2Grows authentication…</div>
-<div class="hint">Your plants and sales are tied to your account. Other users cannot access your private workspace.</div>
+<div class="status" id="status">Connecting to J2Grows authentication…</div><div class="hint">Your plants and sales are tied to your account. Other users cannot access your private workspace.</div>
 </main>
 <script>
-(() => {
+(()=>{
 const SUPABASE_URL='https://fikyexmwwvlggeosolfe.supabase.co';
 const SUPABASE_KEY='sb_publishable_rIqVXBE087N83L4LKBHdSw_nhvj1XiG';
-const $=id=>document.getElementById(id);
-let signup=true;
-let sb=null;
-
+const $=id=>document.getElementById(id);let signup=true,sb=null;
 function message(el,text){el.textContent=text;el.classList.toggle('show',!!text)}
 function setMode(v){signup=v;$('signupTab').classList.toggle('active',v);$('loginTab').classList.toggle('active',!v);$('dbWrap').style.display=v?'grid':'none';$('title').textContent=v?'Create your database':'Welcome back';$('sub').textContent=v?'Create an account and name your private plant database.':'Sign in to open your private plant database.';$('submit').textContent=v?'Create my database':'Sign in';$('password').autocomplete=v?'new-password':'current-password';message($('error'),'');message($('success'),'')}
-$('signupTab').addEventListener('click',()=>setMode(true));
-$('loginTab').addEventListener('click',()=>setMode(false));
-
-function fail(text){throw new Error(text)}
-
-async function profile(user,name){
-const {error}=await sb.from('profiles').upsert({id:user.id,email:user.email,database_name:name.trim(),updated_at:new Date().toISOString()},{onConflict:'id'});
-if(error)throw error;
-}
-
+$('signupTab').onclick=()=>setMode(true);$('loginTab').onclick=()=>setMode(false);
+async function saveProfile(user,name){if(!user||!name?.trim())return;const {error}=await sb.from('profiles').upsert({id:user.id,email:user.email,database_name:name.trim(),updated_at:new Date().toISOString()},{onConflict:'id'});if(error)throw error}
 async function finish(session){
-if(!session)fail('Supabase did not return a login session. If email confirmation is enabled, confirm your email first.');
-const {data:p,error}=await sb.from('profiles').select('database_name').eq('id',session.user.id).maybeSingle();
-if(error)throw error;
-let name=p?.database_name||session.user.user_metadata?.database_name||'';
-if(!name){name=prompt('Name your plant database','My Plant Database')||'';if(!name.trim())fail('A database name is required.');await profile(session.user,name)}
-location.href='app-v4.html';
+ if(!session)throw Error('Supabase did not return a login session. If email confirmation is enabled, confirm your email first.');
+ /* Authentication is successful at this point. Never block login because a profile row is missing. */
+ let name=session.user.user_metadata?.database_name||'';
+ try{const {data:p}=await sb.from('profiles').select('database_name').eq('id',session.user.id).maybeSingle();if(p?.database_name)name=p.database_name}catch(_){/* profile may not exist yet */}
+ if(!name){name=prompt('Name your plant database','My Plant Database')||'';if(name.trim()){try{await saveProfile(session.user,name)}catch(_){/* app auth can repair it later */}}}
+ location.replace('app-v4.html');
 }
-
-$('form').addEventListener('submit',async e=>{
-e.preventDefault();
-message($('error'),'');message($('success'),'');
-const mail=$('email').value.trim();const pass=$('password').value;const name=$('db').value.trim();
-if(!mail) return message($('error'),'Please enter your email address.');
-if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) return message($('error'),'Please enter a valid email address.');
-if(pass.length<6) return message($('error'),'Your password must be at least 6 characters.');
-if(signup&&!name) return message($('error'),'Please give your database a name.');
-$('submit').disabled=true;$('submit').textContent=signup?'Creating account…':'Signing in…';
-try{
-if(signup){
-const {data,error}=await sb.auth.signUp({email:mail,password:pass,options:{data:{database_name:name},emailRedirectTo:window.location.origin+'/J2Grows-Database/login.html'}});
-if(error)throw error;
-if(!data.session){setMode(false);$('email').value=mail;message($('success'),'Account created. Check your email to confirm the account, then click Sign in.');return;}
-await profile(data.user,name);await finish(data.session);
-}else{
-const {data,error}=await sb.auth.signInWithPassword({email:mail,password:pass});
-if(error)throw error;
-await finish(data.session);
-}
-}catch(err){
-let text=err?.message||'Authentication failed.';
-if(/email not confirmed/i.test(text))text='Your email has not been confirmed. Check your inbox, confirm the account, then try Sign in again.';
-if(/invalid login credentials/i.test(text))text='Email or password is incorrect.';
-message($('error'),text);
-}finally{$('submit').disabled=false;$('submit').textContent=signup?'Create my database':'Sign in'}
-});
-
-function boot(){
-try{
-sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
-$('status').textContent='Authentication ready';
-sb.auth.getSession().then(async({data,error})=>{
-if(error){message($('error'),error.message);return}
-if(data.session){try{await finish(data.session)}catch(e){message($('error'),e.message)}}
-}).catch(e=>message($('error'),e.message));
-}catch(e){message($('error'),'Authentication could not start: '+e.message);$('status').textContent='Authentication unavailable'}
-}
-
-if(window.supabase)boot();else{setTimeout(()=>{if(!window.supabase){message($('error'),'The authentication library did not load. Please reload the page.');$('status').textContent='Authentication library unavailable'}},5000)}
+$('form').onsubmit=async e=>{e.preventDefault();message($('error'),'');message($('success'),'');const mail=$('email').value.trim(),pass=$('password').value,name=$('db').value.trim();if(!mail)return message($('error'),'Please enter your email address.');if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail))return message($('error'),'Please enter a valid email address.');if(pass.length<6)return message($('error'),'Your password must be at least 6 characters.');if(signup&&!name)return message($('error'),'Please give your database a name.');$('submit').disabled=true;$('submit').textContent=signup?'Creating account…':'Signing in…';try{
+ if(signup){const {data,error}=await sb.auth.signUp({email:mail,password:pass,options:{data:{database_name:name},emailRedirectTo:window.location.origin+'/J2Grows-Database/login.html'}});if(error)throw error;if(!data.session){setMode(false);$('email').value=mail;message($('success'),'Account created. Check your email to confirm the account, then click Sign in.');return}try{await saveProfile(data.user,name)}catch(_){}await finish(data.session)}
+ else {const {data,error}=await sb.auth.signInWithPassword({email:mail,password:pass});if(error)throw error;await finish(data.session)}
+ }catch(err){let text=err?.message||'Authentication failed.';if(/email not confirmed/i.test(text))text='Your email has not been confirmed. Check your inbox, confirm the account, then try Sign in again.';if(/invalid login credentials/i.test(text))text='Email or password is incorrect.';message($('error'),text)}finally{$('submit').disabled=false;$('submit').textContent=signup?'Create my database':'Sign in'}};
+function boot(){try{sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);$('status').textContent='Authentication ready';sb.auth.getSession().then(async({data,error})=>{if(error)return message($('error'),error.message);if(data.session){try{await finish(data.session)}catch(e){message($('error'),e.message)}}}).catch(e=>message($('error'),e.message))}catch(e){message($('error'),'Authentication could not start: '+e.message);$('status').textContent='Authentication unavailable'}}
+if(window.supabase)boot();else setTimeout(()=>{if(!window.supabase){message($('error'),'The authentication library did not load. Please reload the page.');$('status').textContent='Authentication library unavailable'}},5000);
 })();
 </script>
 </body>
