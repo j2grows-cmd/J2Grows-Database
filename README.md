@@ -1,19 +1,29 @@
 # J2Grows Database
 
-A lightweight plant collection and sales database for J2Grows.
+The J2Grows plant collection and sales command centre.
+
+## Current app
+
+- `index.html` — GitHub Pages entry point
+- `app-v4.html` — current application
+- `.github/workflows/pages.yml` — GitHub Pages deployment
 
 ## Features
 
-- Plant inventory with species, cultivar, status, cost, purchase date, source, location and notes
-- Sales ledger with sale price, plant cost, buyer, channel and profit
-- Dashboard with collection count, sales, revenue and profit
-- Searchable plant and sales tables
-- JSON backup and restore
-- CSV exports for plants and sales
-- Browser-local storage, so the app works without a server or account
+- Plant collection with Personal / Sale classification
+- Plant lifecycle tracking
+- Plant profiles and photo uploads
+- Propagation records and parent/child relationships
+- Sales listings and completed sales
+- Revenue, costs and profit tracking
+- Search and collection filters
+- No user login required
+- Supabase-backed data storage
 
-## Usage
+## Deployment
 
-Open `index.html` in a browser or publish the repository with GitHub Pages.
+The repository is published with GitHub Pages. Pushes to `main` automatically deploy the current app.
 
-> The current version stores data in the browser's local storage. Export a JSON backup regularly if the data matters. A future version can move the data layer to a hosted database/authentication service if multi-device or multi-user access is needed.
+## Development
+
+The application is intentionally kept as a single self-contained HTML file so it can remain simple to deploy and maintain.
