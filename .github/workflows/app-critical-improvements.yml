@@ -19,33 +19,15 @@ jobs:
           from pathlib import Path
           p = Path('app-v4.html')
           s = p.read_text(encoding='utf-8')
-
-          # Show the correct active navigation item on the first load.
-          old = "async function load(){try{plants=await api('/plants?select=*&order=created_at.desc');sales=await api('/sales?select=*&order=sale_date.desc');render()}catch(e){main.innerHTML="
-          new = "async function load(){try{plants=await api('/plants?select=*&order=created_at.desc');sales=await api('/sales?select=*&order=sale_date.desc');nav(view)}catch(e){main.innerHTML="
-          if old not in s: raise SystemExit('load pattern not found')
-          s = s.replace(old, new, 1)
-
-          # Make lifecycle tracking reflect real-world reservations.
-          old = "const a=['Acquired','Growing','Propagated','For Sale','Sold'];"
-          new = "const a=['Acquired','Growing','Propagated','For Sale','Reserved','Sold'];"
-          if old not in s: raise SystemExit('stage pattern not found')
-          s = s.replace(old, new, 1)
-
-          # Search the fields users actually need to find plants by.
-          old = "((p.name||'').toLowerCase().includes(q)||(p.species||'').toLowerCase().includes(q)||(p.variety||'').toLowerCase().includes(q))"
-          new = "((p.name||'').toLowerCase().includes(q)||(p.species||'').toLowerCase().includes(q)||(p.variety||'').toLowerCase().includes(q)||(p.plant_code||'').toLowerCase().includes(q)||(p.purchase_source||p.source||'').toLowerCase().includes(q)||(p.location||'').toLowerCase().includes(q)||(p.notes||'').toLowerCase().includes(q))"
-          if old not in s: raise SystemExit('search pattern not found')
-          s = s.replace(old, new, 1)
-
-          # Use a proper mobile bottom navigation instead of hiding navigation completely.
-          marker = "@media(max-width:480px){.side{display:none}.main{margin:0}.cards{grid-template-columns:1fr}}"
-          mobile = "@media(max-width:480px){.side{display:flex;inset:auto 0 0 0;width:100%;height:70px;padding:7px 10px;border-right:0;border-top:1px solid #183722;align-items:center;background:#06100af8;backdrop-filter:blur(14px)}.side .brand{display:none}.nav{display:flex;width:100%;justify-content:space-around;gap:4px}.nav button{flex:1;text-align:center;padding:7px 4px;font-size:11px}.nav button span{display:block;font-size:9px;margin-top:3px}.main{margin:0;padding:18px 14px 92px}.cards{grid-template-columns:1fr}}"
-          if marker not in s: raise SystemExit('mobile pattern not found')
-          s = s.replace(marker, mobile, 1)
-
-          p.write_text(s, encoding='utf-8')
-
+          replacements = [
+            ("async function load(){try{plants=await api('/plants?select=*&order=created_at.desc');sales=await api('/sales?select=*&order=sale_date.desc');render()}catch(e){main.innerHTML=", "async function load(){try{plants=await api('/plants?select=*&order=created_at.desc');sales=await api('/sales?select=*&order=sale_date.desc');nav(view)}catch(e){main.innerHTML="),
+            ("const a=['Acquired','Growing','Propagated','For Sale','Sold'];", "const a=['Acquired','Growing','Propagated','For Sale','Reserved','Sold'];"),
+            ("((p.name||'').toLowerCase().includes(q)||(p.species||'').toLowerCase().includes(q)||(p.variety||'').toLowerCase().includes(q))", "((p.name||'').toLowerCase().includes(q)||(p.species||'').toLowerCase().includes(q)||(p.variety||'').toLowerCase().includes(q)||(p.plant_code||'').toLowerCase().includes(q)||(p.purchase_source||p.source||'').toLowerCase().includes(q)||(p.location||'').toLowerCase().includes(q)||(p.notes||'').toLowerCase().includes(q))"),
+            ("@media(max-width:480px){.side{display:none}.main{margin:0}.cards{grid-template-columns:1fr}}", "@media(max-width:480px){.side{display:flex;inset:auto 0 0 0;width:100%;height:70px;padding:7px 10px;border-right:0;border-top:1px solid #183722;align-items:center;background:#06100af8;backdrop-filter:blur(14px)}.side .brand{display:none}.nav{display:flex;width:100%;justify-content:space-around;gap:4px}.nav button{flex:1;text-align:center;padding:7px 4px;font-size:11px}.nav button span{display:block;font-size:9px;margin-top:3px}.main{margin:0;padding:18px 14px 92px}.cards{grid-template-columns:1fr}}")]
+          for old,new in replacements:
+            if old not in s: raise SystemExit('pattern not found: '+old[:80])
+            s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
       - name: Remove this one-shot patch workflow and commit
         shell: bash
         run: |
