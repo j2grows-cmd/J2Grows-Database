@@ -17,7 +17,6 @@
 
   let session = null;
   let profile = null;
-
   const esc = v => String(v || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
   async function load() {
@@ -33,29 +32,15 @@
     const nav = document.querySelector('.nav');
     if (!nav || document.getElementById('workspace-settings-nav')) return;
     const button = document.createElement('button');
-    button.id = 'workspace-settings-nav';
-    button.type = 'button';
-    button.innerHTML = '⚙️ <span>Settings</span>';
-    button.onclick = open;
+    button.id = 'workspace-settings-nav'; button.type = 'button'; button.innerHTML = '⚙️ <span>Settings</span>'; button.onclick = open;
     nav.appendChild(button);
   }
 
   function open() {
     let overlay = document.getElementById('workspace-settings');
     if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.id = 'workspace-settings';
-      overlay.className = 'ws-overlay';
-      overlay.hidden = true;
-      overlay.innerHTML = `<div class="ws-box">
-        <div class="ws-head"><div><div class="ws-ey">WORKSPACE SETTINGS</div><div class="ws-title">Account & Database</div><div class="ws-sub">Manage the identity and security of your private Command Centre.</div></div><button class="ws-close" id="ws-close">×</button></div>
-        <div class="ws-grid">
-          <div class="ws-card ws-full"><div class="ws-label">Database name</div><input id="ws-db" class="ws-input" maxlength="60" placeholder="Your database name"><div class="ws-actions"><button class="ws-btn ws-primary" id="ws-save">Save database name</button></div><div id="ws-db-msg" class="ws-msg"></div></div>
-          <div class="ws-card"><div class="ws-label">Signed-in email</div><div class="ws-value" id="ws-email"></div></div>
-          <div class="ws-card"><div class="ws-label">Workspace status</div><div class="ws-value">🔒 Private</div></div>
-          <div class="ws-card ws-full"><div class="ws-label">Password</div><div class="ws-sub" style="margin-top:7px">Send a password-reset email to your signed-in address.</div><div class="ws-actions"><button class="ws-btn" id="ws-reset">Send password reset</button><button class="ws-btn ws-danger" id="ws-signout">Sign out</button></div><div id="ws-sec-msg" class="ws-msg"></div></div>
-        </div>
-      </div>`;
+      overlay = document.createElement('div'); overlay.id = 'workspace-settings'; overlay.className = 'ws-overlay'; overlay.hidden = true;
+      overlay.innerHTML = `<div class="ws-box"><div class="ws-head"><div><div class="ws-ey">WORKSPACE SETTINGS</div><div class="ws-title">Account & Database</div><div class="ws-sub">Manage the identity and security of your private Command Centre.</div></div><button class="ws-close" id="ws-close">×</button></div><div class="ws-grid"><div class="ws-card ws-full"><div class="ws-label">Database name</div><input id="ws-db" class="ws-input" maxlength="60" placeholder="Your database name"><div class="ws-actions"><button class="ws-btn ws-primary" id="ws-save">Save database name</button></div><div id="ws-db-msg" class="ws-msg"></div></div><div class="ws-card"><div class="ws-label">Signed-in email</div><div class="ws-value" id="ws-email"></div></div><div class="ws-card"><div class="ws-label">Workspace status</div><div class="ws-value">🔒 Private</div></div><div class="ws-card ws-full"><div class="ws-label">Password</div><div class="ws-sub" style="margin-top:7px">Send a password-reset email to your signed-in address.</div><div class="ws-actions"><button class="ws-btn" id="ws-reset">Send password reset</button><button class="ws-btn ws-danger" id="ws-signout">Sign out</button></div><div id="ws-sec-msg" class="ws-msg"></div></div></div></div>`;
       document.body.appendChild(overlay);
       document.getElementById('ws-close').onclick = () => overlay.hidden = true;
       overlay.addEventListener('click', e => { if (e.target === overlay) overlay.hidden = true; });
@@ -65,23 +50,19 @@
     }
     document.getElementById('ws-db').value = profile?.database_name || '';
     document.getElementById('ws-email').textContent = session?.user?.email || '';
-    document.getElementById('ws-db-msg').textContent = '';
-    document.getElementById('ws-sec-msg').textContent = '';
+    document.getElementById('ws-db-msg').textContent = ''; document.getElementById('ws-sec-msg').textContent = '';
     overlay.hidden = false;
   }
 
   async function saveName() {
-    const input = document.getElementById('ws-db');
-    const msg = document.getElementById('ws-db-msg');
-    const name = input.value.trim();
+    const input = document.getElementById('ws-db'); const msg = document.getElementById('ws-db-msg'); const name = input.value.trim();
     msg.className = 'ws-msg'; msg.textContent = '';
     if (!name) { msg.className += ' ws-error'; msg.textContent = 'Please enter a database name.'; return; }
     const btn = document.getElementById('ws-save'); btn.disabled = true;
     try {
       const { data, error } = await sb.from('profiles').upsert({ id: session.user.id, database_name: name, updated_at: new Date().toISOString() }).select().single();
       if (error) throw error;
-      profile = data;
-      document.title = name + ' · J2Grows Command Centre';
+      profile = data; document.title = name + ' · J2Grows Command Centre';
       const brand = document.querySelector('.brand > div:nth-child(2)');
       if (brand) brand.innerHTML = '<b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:175px">' + esc(name) + '</b><small>J2GROWS COMMAND CENTRE</small>';
       msg.textContent = 'Database name updated.';
@@ -90,17 +71,14 @@
   }
 
   async function resetPassword() {
-    const msg = document.getElementById('ws-sec-msg');
-    msg.className = 'ws-msg'; msg.textContent = '';
+    const msg = document.getElementById('ws-sec-msg'); msg.className = 'ws-msg'; msg.textContent = '';
     try {
       const { error } = await sb.auth.resetPasswordForEmail(session.user.email, { redirectTo: window.location.origin + window.location.pathname });
-      if (error) throw error;
-      msg.textContent = 'Password reset email sent.';
+      if (error) throw error; msg.textContent = 'Password reset email sent.';
     } catch (e) { msg.className += ' ws-error'; msg.textContent = e.message || 'Unable to send password reset email.'; }
   }
 
-  const wait = setInterval(() => {
-    if (document.querySelector('.nav')) { clearInterval(wait); load(); }
-  }, 100);
+  const wait = setInterval(() => { if (document.querySelector('.nav')) { clearInterval(wait); load(); } }, 100);
   setTimeout(() => clearInterval(wait), 15000);
 })();
+// deployment trigger
