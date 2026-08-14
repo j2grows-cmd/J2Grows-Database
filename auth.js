@@ -1,11 +1,10 @@
 /* J2Grows Command Centre — account gate */
+/* Authenticated workspace release: 2026-08-14 */
 (function () {
   const SUPABASE_URL = 'https://izsjxfigndqkuarooequ.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_l7YUVUI649sClf3h2_KH-Q_EHPO-ffR';
   const REST_PREFIX = SUPABASE_URL + '/rest/v1/';
 
-  // Load supabase-js synchronously so the legacy single-file app can use an authenticated
-  // session before its existing inline code starts querying the REST API.
   if (!window.supabase) {
     document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"><\\/script>');
   }
@@ -25,7 +24,7 @@
     .auth-brand{display:flex;align-items:center;gap:13px;margin-bottom:28px}.auth-logo{width:48px;height:48px;display:grid;place-items:center;border-radius:15px;background:linear-gradient(145deg,#caffd2,#4ad978);font-size:24px}.auth-brand b{font-size:20px;font-weight:950}.auth-brand small{display:block;color:#71917d;font-size:9px;letter-spacing:.2em;margin-top:2px}
     .auth-ey{color:#6df08e;font-size:10px;font-weight:950;letter-spacing:.18em}.auth-title{font-size:31px;font-weight:950;margin:5px 0 8px}.auth-sub{color:#8fa797;line-height:1.5;margin-bottom:22px}
     .auth-tabs{display:flex;gap:7px;margin-bottom:18px}.auth-tab{flex:1;border:1px solid #274c32;background:#0b1810;color:#8fa797;padding:11px;border-radius:11px;font-weight:900;cursor:pointer}.auth-tab.active{background:#6df08e;color:#06210b;border-color:#6df08e}
-    .auth-field{display:grid;gap:6px;margin:12px 0}.auth-field label{font-size:10px;color:#8fa797;font-weight:900;text-transform:uppercase;letter-spacing:.1em}.auth-input{width:100%;background:#07120b;color:#fff;border:1px solid #274c32;padding:13px;border-radius:11px;outline:none}.auth-input:focus{border-color:#6df08e;box-shadow:0 0 0 3px #6df08e18}.auth-button{width:100%;border:0;background:linear-gradient(135deg,#aaffb9,#55db79);color:#05210b;padding:13px;border-radius:11px;font-weight:950;cursor:pointer;margin-top:8px}.auth-button:disabled{opacity:.55;cursor:wait}.auth-error{min-height:18px;color:#ff8178;font-size:12px;margin-top:10px}.auth-foot{color:#607668;font-size:10px;line-height:1.5;margin-top:18px}.account-chip{position:absolute;right:18px;bottom:18px;left:18px;border:1px solid #274c32;border-radius:12px;padding:10px;background:#0b1810;color:#8fa797;font-size:11px}.account-chip button{float:right;border:0;background:transparent;color:#ffaaa4;cursor:pointer;font-weight:900}.db-chip{margin-top:12px;padding:10px 12px;border:1px solid #315c3b;border-radius:11px;background:#0b1911;color:#a9f2b7;font-size:11px}.db-chip b{color:#fff}
+    .auth-field{display:grid;gap:6px;margin:12px 0}.auth-field label{font-size:10px;color:#8fa797;font-weight:900;text-transform:uppercase;letter-spacing:.1em}.auth-input{width:100%;background:#07120b;color:#fff;border:1px solid #274c32;padding:13px;border-radius:11px;outline:none}.auth-input:focus{border-color:#6df08e;box-shadow:0 0 0 3px #6df08e18}.auth-button{width:100%;border:0;background:linear-gradient(135deg,#aaffb9,#55db79);color:#05210b;padding:13px;border-radius:11px;font-weight:950;cursor:pointer;margin-top:8px}.auth-button:disabled{opacity:.55;cursor:wait}.auth-error{min-height:18px;color:#ff8178;font-size:12px;margin-top:10px}.auth-foot{color:#607668;font-size:10px;line-height:1.5;margin-top:18px}.account-chip{position:absolute;right:18px;bottom:18px;left:18px;border:1px solid #274c32;border-radius:12px;padding:10px;background:#0b1810;color:#8fa797;font-size:11px}.account-chip button{float:right;border:0;background:transparent;color:#ffaaa4;cursor:pointer;font-weight:900}
   `;
   document.head.appendChild(style);
 
@@ -129,11 +128,7 @@
       if (mode === 'signup') {
         const databaseName = dbName.value.trim();
         if (!databaseName) throw new Error('Please give your database a name.');
-        const { data, error } = await sb.auth.signUp({
-          email: email.value.trim(),
-          password: password.value,
-          options: { data: { database_name: databaseName } }
-        });
+        const { data, error } = await sb.auth.signUp({ email: email.value.trim(), password: password.value, options: { data: { database_name: databaseName } } });
         if (error) throw error;
         session = data.session;
         if (!session) {
@@ -162,22 +157,18 @@
     }
   };
 
-  // Intercept the legacy app's REST calls and attach the user's JWT. On inserts, attach the
-  // authenticated user id so the existing forms remain compatible with the new RLS rules.
   const originalFetch = window.fetch.bind(window);
   window.fetch = async function (input, init) {
     const url = typeof input === 'string' ? input : input && input.url;
     if (!url || !url.startsWith(REST_PREFIX)) return originalFetch(input, init);
     await authReady;
     if (!session) return new Response(JSON.stringify({ message: 'Authentication required' }), { status: 401, headers: {'Content-Type':'application/json'} });
-
     const nextInit = { ...(init || {}) };
     const headers = new Headers(nextInit.headers || (input instanceof Request ? input.headers : undefined));
     headers.set('apikey', SUPABASE_KEY);
     headers.set('Authorization', 'Bearer ' + session.access_token);
     headers.set('Content-Type', 'application/json');
     nextInit.headers = headers;
-
     const method = (nextInit.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
     const resource = url.slice(REST_PREFIX.length).split('?')[0].split('/')[0];
     if (method === 'POST' && (resource === 'plants' || resource === 'sales') && nextInit.body) {
@@ -204,19 +195,13 @@
         showGate();
         errorBox.textContent = err.message || 'Unable to load your database.';
       }
-    } else {
-      showGate();
-    }
+    } else showGate();
   });
 
   sb.auth.onAuthStateChange(async (_event, nextSession) => {
     session = nextSession;
     if (session) {
       try { await loadProfile(); applyDatabaseBrand(); hideGate(); resolveWhenReady(); } catch (_) { showGate(); }
-    } else {
-      showGate();
-      readyResolved = false;
-      authReady.then(() => {});
-    }
+    } else showGate();
   });
 })();
