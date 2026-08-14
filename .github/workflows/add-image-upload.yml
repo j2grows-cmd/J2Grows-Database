@@ -3,10 +3,6 @@ name: Add direct plant image upload support
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - 'app-v4.html'
-      - 'premium-final.html'
-      - 'ownership.html'
 
 permissions:
   contents: write
@@ -16,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Add image upload enhancement
+      - name: Add or repair image upload enhancement
         shell: python
         run: |
           from pathlib import Path
@@ -66,7 +62,7 @@ jobs:
               if (input.value && input.value.startsWith('data:image/')) { preview.src=input.value; preview.style.display='block'; status.textContent='Current image'; }
             }
             function init() {
-              document.querySelectorAll('input[name="photo_url"], input#photo_url, input[name="photoUrl"], input#photoUrl').forEach(makeUpload);
+              document.querySelectorAll('input[name="photo_url"], input#photo_url, input[name="photoUrl"], input#photoUrl, input#f_photo').forEach(makeUpload);
             }
             new MutationObserver(init).observe(document.documentElement, {childList:true,subtree:true});
             init();
@@ -76,8 +72,10 @@ jobs:
             p=Path(name)
             if not p.exists(): continue
             s=p.read_text(encoding='utf-8')
-            if 'j2grows-image-upload' in s: continue
-            s=s.replace('</body>', script+'\n</body>') if '</body>' in s else s+script
+            if 'j2grows-image-upload' in s:
+              s=s.replace('input[name="photo_url"], input#photo_url, input[name="photoUrl"], input#photoUrl', 'input[name="photo_url"], input#photo_url, input[name="photoUrl"], input#photoUrl, input#f_photo')
+            else:
+              s=s.replace('</body>', script+'\n</body>') if '</body>' in s else s+script
             p.write_text(s, encoding='utf-8')
       - name: Commit patched files
         run: |
@@ -85,5 +83,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add app-v4.html premium-final.html ownership.html
           git diff --cached --quiet && exit 0
-          git commit -m 'Add image upload instead of plant photo URL [skip ci]'
+          git commit -m 'Fix direct plant image upload field detection [skip ci]'
           git push
