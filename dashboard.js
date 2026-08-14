@@ -1,9 +1,9 @@
 // J2Grows Command Centre — premium workspace dashboard
+// deployment trigger: premium-dashboard-v1
 (function(){
   const money=x=>'£'+Number(x||0).toFixed(2);
   const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const workspaceName=()=>document.querySelector('.brand > div:nth-child(2) b')?.textContent?.trim() || 'Your Workspace';
-
   window.dashboard=function(){
     const all=Array.isArray(plants)?plants:[];
     const sold=Array.isArray(sales)?sales:[];
