@@ -127,16 +127,41 @@
     try {
       if (mode === 'signup') {
         const databaseName = dbName.value.trim();
+        const signupEmail = email.value.trim();
         if (!databaseName) throw new Error('Please give your database a name.');
-        const { data, error } = await sb.auth.signUp({ email: email.value.trim(), password: password.value, options: { data: { database_name: databaseName } } });
+        if (!signupEmail) throw new Error('Please enter your email address.');
+
+        const { data, error } = await sb.auth.signUp({
+          email: signupEmail,
+          password: password.value,
+          options: {
+            data: { database_name: databaseName },
+            emailRedirectTo: window.location.origin + window.location.pathname
+          }
+        });
         if (error) throw error;
+
         session = data.session;
         if (!session) {
-          errorBox.textContent = 'Account created. Check your email to confirm it, then return here to sign in.';
           setMode('login');
+          email.value = signupEmail;
+          password.value = '';
+          errorBox.style.color = '#f0cf72';
+          errorBox.textContent = 'Account created. Check your email and click the confirmation link. You will then be signed in automatically.';
           return;
         }
+
+        errorBox.style.color = '';
         await loadProfile();
+        if (!profile || !profile.database_name) {
+          const { data: saved, error: saveError } = await sb.from('profiles').upsert({
+            id: session.user.id,
+            database_name: databaseName,
+            updated_at: new Date().toISOString()
+          }).select().single();
+          if (saveError) throw saveError;
+          profile = saved;
+        }
         hideGate();
         applyDatabaseBrand();
         resolveWhenReady();
@@ -144,6 +169,7 @@
         const { data, error } = await sb.auth.signInWithPassword({ email: email.value.trim(), password: password.value });
         if (error) throw error;
         session = data.session;
+        errorBox.style.color = '';
         await loadProfile();
         if (!(await ensureDatabaseName())) throw new Error('A database name is required to continue.');
         applyDatabaseBrand();
@@ -151,6 +177,7 @@
         resolveWhenReady();
       }
     } catch (err) {
+      errorBox.style.color = '';
       errorBox.textContent = err.message || 'Unable to authenticate.';
     } finally {
       submit.disabled = false;
