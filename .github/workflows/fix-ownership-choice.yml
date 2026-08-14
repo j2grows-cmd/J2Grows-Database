@@ -1,0 +1,45 @@
+name: Make ownership choice prominent
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'Make ownership choice prominent'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update ownership selector
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('app-v4.html')
+          s = p.read_text(encoding='utf-8')
+          old = '<div class="field"><label>Ownership</label><select class="select" id="f_owner"><option value="Sale">Sale</option><option value="Personal">Personal</option></select></div>'
+          new = '''<div class="field full"><label>Plant type</label><div class="owner-choice" id="ownerChoice"><button type="button" class="owner-card" data-owner="Personal" onclick="setOwnerChoice('Personal')"><span class="owner-icon">🌿</span><span><b>Personal</b><small>Keep this plant in your collection</small></span></button><button type="button" class="owner-card" data-owner="Sale" onclick="setOwnerChoice('Sale')"><span class="owner-icon">£</span><span><b>Sale</b><small>Business stock available for sale</small></span></button></div><select class="select" id="f_owner" style="display:none"><option value="Sale">Sale</option><option value="Personal">Personal</option></select></div>'''
+          if old not in s:
+            raise SystemExit('ownership form markup not found')
+          s = s.replace(old, new, 1)
+          css = '.owner-choice{display:grid;grid-template-columns:1fr 1fr;gap:10px}.owner-card{display:flex;align-items:center;gap:12px;text-align:left;padding:16px;border:1px solid var(--l);background:#0b1810;color:#fff;border-radius:14px;cursor:pointer;transition:.15s}.owner-card:hover{border-color:var(--g);transform:translateY(-1px)}.owner-card.selected{border-color:var(--g);background:#12301c;box-shadow:0 0 0 1px #6df08e44,inset 3px 0 var(--g)}.owner-icon{width:38px;height:38px;display:grid;place-items:center;border-radius:10px;background:#102b45;font-size:18px;font-weight:950}.owner-card[data-owner="Sale"] .owner-icon{background:#302713;color:var(--gold)}.owner-card span:last-child{display:grid;gap:3px}.owner-card small{color:var(--m);font-size:10px}@media(max-width:600px){.owner-choice{grid-template-columns:1fr}}'
+          marker = '.empty{text-align:center;padding:50px;color:var(--m)}'
+          if css not in s:
+            s = s.replace(marker, marker+css, 1)
+          old_js = "if($('f_owner'))$('f_owner').value=p.ownership_type||'Sale';if($('f_owner'))$('f_owner').onchange=()=>{const sale=$('f_owner').value==='Sale';$('f_sale').disabled=!sale;if(!sale)$('f_sale').value=0};if($('f_owner'))$('f_owner').dispatchEvent(new Event('change'))"
+          new_js = "if($('f_owner'))$('f_owner').value=p.ownership_type||'Sale';window.setOwnerChoice=function(v){$('f_owner').value=v;document.querySelectorAll('.owner-card').forEach(b=>b.classList.toggle('selected',b.dataset.owner===v));const sale=v==='Sale';$('f_sale').disabled=!sale;if(!sale)$('f_sale').value=0};if($('f_owner'))$('f_owner').onchange=()=>setOwnerChoice($('f_owner').value);setOwnerChoice($('f_owner').value)"
+          if old_js not in s:
+            raise SystemExit('ownership javascript not found')
+          s = s.replace(old_js, new_js, 1)
+          p.write_text(s, encoding='utf-8')
+      - name: Commit and remove workflow
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f .github/workflows/fix-ownership-choice.yml
+          git add app-v4.html .github/workflows/fix-ownership-choice.yml
+          git commit -m 'Make Personal or Sale choice prominent'
+          git push
