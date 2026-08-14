@@ -6,13 +6,63 @@
   const NEW_REST = SUPABASE_URL + '/rest/v1/';
   const LEGACY_REST = LEGACY_URL + '/rest/v1/';
 
+  // Install the REST bridge immediately. The old version waited for the
+  // Supabase CDN script to load before installing fetch(), which meant the
+  // app could fire its first database request before authentication existed.
+  let session = null;
+  let readyResolve;
+  let readyResolved = false;
+  const authReady = new Promise(resolve => { readyResolve = resolve; });
+  const originalFetch = window.fetch.bind(window);
+
+  window.fetch = async function(input, init) {
+    let url = typeof input === 'string' ? input : input?.url;
+    if (!url || (!url.startsWith(LEGACY_REST) && !url.startsWith(NEW_REST))) {
+      return originalFetch(input, init);
+    }
+
+    await authReady;
+    if (!session) {
+      return new Response(JSON.stringify({message:'Authentication required'}), {
+        status: 401,
+        headers: {'Content-Type':'application/json'}
+      });
+    }
+
+    if (url.startsWith(LEGACY_REST)) {
+      url = NEW_REST + url.slice(LEGACY_REST.length);
+    }
+
+    const next = {...(init || {})};
+    const headers = new Headers(next.headers || (input instanceof Request ? input.headers : undefined));
+    headers.set('apikey', SUPABASE_KEY);
+    headers.set('Authorization', 'Bearer ' + session.access_token);
+    headers.set('Content-Type', 'application/json');
+    next.headers = headers;
+
+    const method = (next.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+    const resource = url.slice(NEW_REST.length).split('?')[0].split('/')[0];
+    const ownedResources = new Set(['plants','sales','propagations']);
+
+    if (method === 'POST' && ownedResources.has(resource) && next.body) {
+      try {
+        const body = JSON.parse(next.body);
+        if (Array.isArray(body)) {
+          body.forEach(row => { if (row && !row.user_id) row.user_id = session.user.id; });
+        } else if (body && !body.user_id) {
+          body.user_id = session.user.id;
+        }
+        next.body = JSON.stringify(body);
+      } catch (_) {}
+    }
+
+    if (typeof input === 'string') return originalFetch(url, next);
+    return originalFetch(new Request(url, input), next);
+  };
+
   function boot() {
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    let session = null;
     let profile = null;
-    let readyResolve;
-    let readyResolved = false;
-    const authReady = new Promise(resolve => { readyResolve = resolve; });
 
     const style = document.createElement('style');
     style.textContent = `
@@ -29,98 +79,153 @@
     const $ = id => document.getElementById(id);
     const form = $('auth-form'), signupTab = $('auth-signup-tab'), loginTab = $('auth-login-tab'), dbField = $('db-field'), dbName = $('db-name'), email = $('auth-email'), password = $('auth-password'), submit = $('auth-submit'), errorBox = $('auth-error'), title = $('auth-title'), sub = $('auth-sub');
     let mode = 'signup';
-    const esc = v => String(v || '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
+    const esc = v => String(v || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-    function setMode(next){ mode=next; const signup=mode==='signup'; signupTab.classList.toggle('active',signup); loginTab.classList.toggle('active',!signup); dbField.style.display=signup?'':'none'; title.textContent=signup?'Create your database':'Welcome back'; sub.textContent=signup?'Create an account and give your plant database a name.':'Sign in to open your private plant database.'; submit.textContent=signup?'Create my database':'Sign in'; password.autocomplete=signup?'new-password':'current-password'; errorBox.textContent=''; errorBox.style.color=''; }
-    signupTab.onclick=()=>setMode('signup'); loginTab.onclick=()=>setMode('login');
+    function setMode(next) {
+      mode = next;
+      const signup = mode === 'signup';
+      signupTab.classList.toggle('active', signup);
+      loginTab.classList.toggle('active', !signup);
+      dbField.style.display = signup ? '' : 'none';
+      title.textContent = signup ? 'Create your database' : 'Welcome back';
+      sub.textContent = signup ? 'Create an account and give your plant database a name.' : 'Sign in to open your private plant database.';
+      submit.textContent = signup ? 'Create my database' : 'Sign in';
+      password.autocomplete = signup ? 'new-password' : 'current-password';
+      errorBox.textContent = '';
+      errorBox.style.color = '';
+    }
+    signupTab.onclick = () => setMode('signup');
+    loginTab.onclick = () => setMode('login');
 
-    async function loadProfile(){
-      if(!session) return null;
-      const {data,error}=await sb.from('profiles').select('*').eq('id',session.user.id).maybeSingle();
-      if(error) throw error; profile=data; return data;
+    async function loadProfile() {
+      if (!session) return null;
+      const {data,error} = await sb.from('profiles').select('*').eq('id',session.user.id).maybeSingle();
+      if (error) throw error;
+      profile = data;
+      return data;
     }
-    async function saveProfile(name){
-      const {data,error}=await sb.from('profiles').upsert({id:session.user.id,database_name:name,updated_at:new Date().toISOString()}).select().single();
-      if(error) throw error; profile=data; return data;
-    }
-    async function ensureDatabaseName(){
-      const metadataName=session?.user?.user_metadata?.database_name;
-      if(profile?.database_name?.trim()) return profile.database_name.trim();
-      if(metadataName?.trim()) { try { await saveProfile(metadataName.trim()); } catch(_) {} return metadataName.trim(); }
-      const name=window.prompt('Name your plant database','My Plant Database');
-      if(!name?.trim()) return null;
-      try { await saveProfile(name.trim()); } catch(_) {}
-      return name.trim();
-    }
-    function brand(name){
-      if(!name) return;
-      document.title=name+' · J2Grows Command Centre';
-      const el=document.querySelector('.brand > div:nth-child(2)');
-      if(el) el.innerHTML='<b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:175px">'+esc(name)+'</b><small>J2GROWS COMMAND CENTRE</small>';
-    }
-    function ready(){ if(!readyResolved && session){readyResolved=true;readyResolve();} }
 
-    form.onsubmit=async e=>{
-      e.preventDefault(); errorBox.textContent=''; errorBox.style.color=''; submit.disabled=true;
-      try{
-        if(mode==='signup'){
-          const name=dbName.value.trim(), mail=email.value.trim();
-          if(!name) throw Error('Please give your database a name.');
-          const {data,error}=await sb.auth.signUp({email:mail,password:password.value,options:{data:{database_name:name},emailRedirectTo:window.location.origin+window.location.pathname}});
-          if(error) throw error;
-          session=data.session;
-          if(!session){ setMode('login'); email.value=mail; password.value=''; errorBox.style.color='#f0cf72'; errorBox.textContent='Account created. Check your email to confirm the account, then sign in.'; return; }
-          try { await loadProfile(); } catch(_) { profile=null; }
-          try { if(!profile?.database_name) await saveProfile(name); } catch(_) {}
-          brand(name); gate.hidden=true; ready();
-        } else {
-          const {data,error}=await sb.auth.signInWithPassword({email:email.value.trim(),password:password.value});
-          if(error) throw error;
-          session=data.session;
-          try { await loadProfile(); } catch(_) { profile=null; }
-          const name=await ensureDatabaseName();
-          if(!name) throw Error('A database name is required to continue.');
-          brand(name); gate.hidden=true; ready();
-        }
-      }catch(err){ errorBox.style.color=''; errorBox.textContent=err.message||'Unable to authenticate.'; }
-      finally{ submit.disabled=false; }
-    };
+    async function saveProfile(name) {
+      const {data,error} = await sb.from('profiles').upsert({
+        id: session.user.id,
+        email: session.user.email,
+        database_name: name,
+        updated_at: new Date().toISOString()
+      }).select().single();
+      if (error) throw error;
+      profile = data;
+      return data;
+    }
 
-    const originalFetch=window.fetch.bind(window);
-    window.fetch=async function(input,init){
-      let url=typeof input==='string'?input:input?.url;
-      if(!url || (!url.startsWith(LEGACY_REST) && !url.startsWith(NEW_REST))) return originalFetch(input,init);
-      await authReady;
-      if(!session) return new Response(JSON.stringify({message:'Authentication required'}),{status:401,headers:{'Content-Type':'application/json'}});
-      if(url.startsWith(LEGACY_REST)) url=NEW_REST+url.slice(LEGACY_REST.length);
-      const next={...(init||{})};
-      const headers=new Headers(next.headers||(input instanceof Request?input.headers:undefined));
-      headers.set('apikey',SUPABASE_KEY); headers.set('Authorization','Bearer '+session.access_token); headers.set('Content-Type','application/json'); next.headers=headers;
-      const method=(next.method||(input instanceof Request?input.method:'GET')).toUpperCase();
-      const resource=url.slice(NEW_REST.length).split('?')[0].split('/')[0];
-      const ownedResources=new Set(['plants','sales','propagations']);
-      if(method==='POST'&&ownedResources.has(resource)&&next.body){
-        try {
-          const body=JSON.parse(next.body);
-          if(Array.isArray(body)) body.forEach(r=>{if(r&&!r.user_id)r.user_id=session.user.id});
-          else if(body&&!body.user_id) body.user_id=session.user.id;
-          next.body=JSON.stringify(body);
-        } catch(_) {}
+    async function ensureDatabaseName() {
+      const metadataName = session?.user?.user_metadata?.database_name;
+      if (profile?.database_name?.trim()) return profile.database_name.trim();
+      if (metadataName?.trim()) {
+        try { await saveProfile(metadataName.trim()); } catch (_) {}
+        return metadataName.trim();
       }
-      if(typeof input==='string') return originalFetch(url,next);
-      return originalFetch(new Request(url,input),next);
+      return null;
+    }
+
+    function brand(name) {
+      if (!name) return;
+      document.title = name + ' · J2Grows Command Centre';
+      const el = document.querySelector('.brand > div:nth-child(2)');
+      if (el) el.innerHTML = '<b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:175px">' + esc(name) + '</b><small>J2GROWS COMMAND CENTRE</small>';
+    }
+
+    function markReady() {
+      if (!readyResolved) {
+        readyResolved = true;
+        readyResolve();
+      }
+    }
+
+    form.onsubmit = async e => {
+      e.preventDefault();
+      errorBox.textContent = '';
+      submit.disabled = true;
+      try {
+        if (mode === 'signup') {
+          const name = dbName.value.trim();
+          const mail = email.value.trim();
+          if (!name) throw Error('Please give your database a name.');
+          const {data,error} = await sb.auth.signUp({
+            email: mail,
+            password: password.value,
+            options: { data: { database_name: name }, emailRedirectTo: window.location.origin + window.location.pathname }
+          });
+          if (error) throw error;
+          session = data.session;
+          if (!session) {
+            setMode('login');
+            email.value = mail;
+            password.value = '';
+            errorBox.style.color = '#f0cf72';
+            errorBox.textContent = 'Account created. Check your email to confirm the account, then sign in.';
+            return;
+          }
+          try { await loadProfile(); } catch (_) { profile = null; }
+          if (!profile?.database_name) {
+            try { await saveProfile(name); } catch (_) {}
+          }
+          brand(name);
+          gate.hidden = true;
+        } else {
+          const {data,error} = await sb.auth.signInWithPassword({email:email.value.trim(),password:password.value});
+          if (error) throw error;
+          session = data.session;
+          await loadProfile();
+          const name = await ensureDatabaseName();
+          if (!name) throw Error('This account has no database name. Create a new account or contact support.');
+          brand(name);
+          gate.hidden = true;
+        }
+        markReady();
+      } catch (err) {
+        errorBox.style.color = '';
+        errorBox.textContent = err.message || 'Unable to authenticate.';
+      } finally {
+        submit.disabled = false;
+      }
     };
 
-    sb.auth.getSession().then(async ({data})=>{
-      session=data.session;
-      if(session){
-        try{ await loadProfile(); const name=await ensureDatabaseName(); if(!name){await sb.auth.signOut();gate.hidden=false;return;} brand(name); gate.hidden=true; ready(); }
-        catch(err){ gate.hidden=false; errorBox.textContent=err.message||'Unable to load your database.'; }
-      } else gate.hidden=false;
+    sb.auth.getSession().then(async ({data}) => {
+      session = data.session;
+      if (session) {
+        try {
+          await loadProfile();
+          const name = await ensureDatabaseName();
+          if (name) {
+            brand(name);
+            gate.hidden = true;
+          }
+        } catch (err) {
+          gate.hidden = false;
+          errorBox.textContent = err.message || 'Unable to load your database.';
+        }
+      } else {
+        gate.hidden = false;
+      }
+      markReady();
+    }).catch(() => {
+      gate.hidden = false;
+      markReady();
     });
-    sb.auth.onAuthStateChange(async(_event,next)=>{ session=next; if(session){ try{await loadProfile();const name=await ensureDatabaseName();if(name){brand(name);gate.hidden=true;ready();}}catch(_){gate.hidden=false;} } else gate.hidden=false; });
+
+    sb.auth.onAuthStateChange((_event,next) => {
+      session = next;
+      if (!session) gate.hidden = false;
+    });
   }
 
-  if(window.supabase) boot();
-  else { const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js'; s.onload=boot; s.onerror=()=>alert('Could not load authentication.'); document.head.appendChild(s); }
+  if (window.supabase) {
+    boot();
+  } else {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+    s.onload = boot;
+    s.onerror = () => alert('Could not load authentication. Please check your connection and reload.');
+    document.head.appendChild(s);
+  }
 })();
