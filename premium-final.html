@@ -48,7 +48,7 @@ async function move(id){let p=plants.find(x=>x.id===id),v=prompt('Sale price (£
     if (input.value && input.value.startsWith('data:image/')) { preview.src=input.value; preview.style.display='block'; status.textContent='Current image'; }
   }
   function init() {
-    document.querySelectorAll('input[name="photo_url"], input#photo_url, input[name="photoUrl"], input#photoUrl, input#f_photo').forEach(makeUpload);
+    document.querySelectorAll('input[name="photo_url"], input#photo_url, input[name="photoUrl"], input#photoUrl, input#f_photo, input#f_photo').forEach(makeUpload);
   }
   new MutationObserver(init).observe(document.documentElement, {childList:true,subtree:true});
   init();
