@@ -20,4 +20,56 @@
         '<section class="profileSection"><h3>Family tree</h3><div class="family"><div class="familyCard"><div class="label">Parent</div><p>'+(parent?'<a onclick="profile(\''+parent.id+'\')">🌿 '+esc(parent.name)+'</a>':'🌱 Original plant')+'</p></div><div class="familyCard"><div class="label">Children / cuttings</div>'+(children.length?children.map(c=>'<p style="margin:7px 0"><a onclick="profile(\''+c.id+'\')">✂️ '+esc(c.name)+'</a><span class="sub"> · '+esc(c.status||'Growing')+'</span></p>').join(''):'<p class="sub">No propagated children recorded.</p>')+'</div></div></section>'+
         '<section class="profileSection"><h3>History</h3><div class="timeline">'+(events.length?events.join(''):'<div class="empty">No history recorded yet.</div>')+'</div></section>';
     }
-    load();</script></body></html>
+    load();</script><script id="j2grows-image-upload">
+(() => {
+  const MAX_BYTES = 1200 * 1024;
+  const IMAGE_TYPES = /^image\//i;
+  function makeUpload(input) {
+    if (!input || input.dataset.j2Upload === '1') return;
+    input.dataset.j2Upload = '1';
+    input.type = 'hidden';
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px';
+    const file = document.createElement('input');
+    file.type = 'file'; file.accept = 'image/*';
+    file.style.cssText = 'max-width:100%';
+    const status = document.createElement('span');
+    status.style.cssText = 'font-size:12px;opacity:.7';
+    const preview = document.createElement('img');
+    preview.style.cssText = 'width:72px;height:72px;object-fit:cover;border-radius:14px;display:none;border:1px solid rgba(255,255,255,.12)';
+    wrap.append(file, status, preview);
+    input.parentElement.appendChild(wrap);
+    const resize = (f) => new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onerror = reject;
+      r.onload = () => { const img = new Image(); img.onload = () => {
+        const max = 1400, scale = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width*scale); c.height = Math.round(img.height*scale);
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+        resolve(c.toDataURL('image/webp', .82));
+      }; img.onerror = reject; img.src = r.result; };
+      r.readAsDataURL(f);
+    });
+    file.addEventListener('change', async () => {
+      const f = file.files && file.files[0]; if (!f) return;
+      if (!IMAGE_TYPES.test(f.type)) { alert('Please choose an image file.'); file.value=''; return; }
+      if (f.size > 12*1024*1024) { alert('Please choose an image smaller than 12 MB.'); file.value=''; return; }
+      status.textContent = 'Processing image…';
+      try {
+        const data = await resize(f);
+        if (data.length > MAX_BYTES * 1.37) { alert('That image is still too large after compression. Please choose a smaller image.'); status.textContent=''; return; }
+        input.value = data;
+        preview.src = data; preview.style.display='block';
+        status.textContent = 'Image ready';
+      } catch (e) { console.error(e); status.textContent='Could not process image'; }
+    });
+    if (input.value && input.value.startsWith('data:image/')) { preview.src=input.value; preview.style.display='block'; status.textContent='Current image'; }
+  }
+  function init() {
+    document.querySelectorAll('input[name="photo_url"], input#photo_url, input[name="photoUrl"], input#photoUrl').forEach(makeUpload);
+  }
+  new MutationObserver(init).observe(document.documentElement, {childList:true,subtree:true});
+  init();
+})();
+</script>
+</body></html>
