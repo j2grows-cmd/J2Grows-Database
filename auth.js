@@ -29,7 +29,7 @@
     const $ = id => document.getElementById(id);
     const form = $('auth-form'), signupTab = $('auth-signup-tab'), loginTab = $('auth-login-tab'), dbField = $('db-field'), dbName = $('db-name'), email = $('auth-email'), password = $('auth-password'), submit = $('auth-submit'), errorBox = $('auth-error'), title = $('auth-title'), sub = $('auth-sub');
     let mode = 'signup';
-    const esc = v => String(v || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const esc = v => String(v || '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
 
     function setMode(next){ mode=next; const signup=mode==='signup'; signupTab.classList.toggle('active',signup); loginTab.classList.toggle('active',!signup); dbField.style.display=signup?'':'none'; title.textContent=signup?'Create your database':'Welcome back'; sub.textContent=signup?'Create an account and give your plant database a name.':'Sign in to open your private plant database.'; submit.textContent=signup?'Create my database':'Sign in'; password.autocomplete=signup?'new-password':'current-password'; errorBox.textContent=''; errorBox.style.color=''; }
     signupTab.onclick=()=>setMode('signup'); loginTab.onclick=()=>setMode('login');
@@ -98,7 +98,15 @@
       headers.set('apikey',SUPABASE_KEY); headers.set('Authorization','Bearer '+session.access_token); headers.set('Content-Type','application/json'); next.headers=headers;
       const method=(next.method||(input instanceof Request?input.method:'GET')).toUpperCase();
       const resource=url.slice(NEW_REST.length).split('?')[0].split('/')[0];
-      if(method==='POST'&&(resource==='plants'||resource==='sales')&&next.body){ try { const body=JSON.parse(next.body); if(Array.isArray(body)) body.forEach(r=>{if(!r.user_id)r.user_id=session.user.id}); else if(body&&!body.user_id)body.user_id=session.user.id; next.body=JSON.stringify(body); } catch(_){} }
+      const ownedResources=new Set(['plants','sales','propagations']);
+      if(method==='POST'&&ownedResources.has(resource)&&next.body){
+        try {
+          const body=JSON.parse(next.body);
+          if(Array.isArray(body)) body.forEach(r=>{if(r&&!r.user_id)r.user_id=session.user.id});
+          else if(body&&!body.user_id) body.user_id=session.user.id;
+          next.body=JSON.stringify(body);
+        } catch(_) {}
+      }
       if(typeof input==='string') return originalFetch(url,next);
       return originalFetch(new Request(url,input),next);
     };
