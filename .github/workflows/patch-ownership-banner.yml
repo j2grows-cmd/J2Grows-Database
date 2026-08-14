@@ -13,34 +13,33 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+          import re
           p=Path('app-v4.html')
           s=p.read_text(encoding='utf-8')
-          old='''<div class="field"><label>Ownership</label><select class="select" id="f_owner"><option value="Sale">Sale</option><option value="Personal">Personal</option></select></div>'''
-          new='''<div class="field full ownership-banner-field"><label>Plant Type</label><div class="ownership-banner" id="ownershipBanner"><button type="button" class="ownership-option" data-owner="Personal" onclick="setOwnerType(\\'Personal\\')"><span class="ownership-icon">🌿</span><span><b>PERSONAL</b><small>Keep in my collection</small></span></button><button type="button" class="ownership-option" data-owner="Sale" onclick="setOwnerType(\\'Sale\\')"><span class="ownership-icon">£</span><span><b>SALE</b><small>Business stock</small></span></button></div><select class="select ownership-hidden" id="f_owner" aria-hidden="true" tabindex="-1"><option value="Sale">Sale</option><option value="Personal">Personal</option></select></div>'''
-          if old not in s:
-            raise SystemExit('ownership field not found')
-          s=s.replace(old,new,1)
+          banner='''<div class="field full ownership-banner-field"><label>Plant Type</label><div class="ownership-banner" id="ownershipBanner"><button type="button" class="ownership-option" data-owner="Personal" onclick="setOwnerType(\\'Personal\\')"><span class="ownership-icon">🌿</span><span><b>PERSONAL</b><small>Keep in my collection</small></span></button><button type="button" class="ownership-option" data-owner="Sale" onclick="setOwnerType(\\'Sale\\')"><span class="ownership-icon">£</span><span><b>SALE</b><small>Business stock</small></span></button></div><select class="select ownership-hidden" id="f_owner" aria-hidden="true" tabindex="-1"><option value="Sale">Sale</option><option value="Personal">Personal</option></select></div>'''
+          pattern=r'<div class="field full"><label>Plant type</label><div class="owner-choice" id="ownerChoice">.*?</div><select class="select" id="f_owner" style="display:none"><option value="Sale">Sale</option><option value="Personal">Personal</option></select></div>'
+          s2,n=re.subn(pattern,banner,s,count=1,flags=re.S)
+          if n==0:
+            if 'ownership-banner' not in s:
+              raise SystemExit('current ownership UI not found')
+          else:
+            s=s2
           css='''.ownership-banner-field{margin-bottom:4px}.ownership-banner{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:5px;background:#07130b;border:1px solid #274c32;border-radius:15px}.ownership-option{display:flex;align-items:center;gap:12px;text-align:left;padding:14px 16px;border:1px solid transparent;border-radius:11px;background:transparent;color:#8fa797;cursor:pointer;transition:.18s}.ownership-option:hover{background:#10251a;color:#fff}.ownership-option.active{background:linear-gradient(135deg,#143a20,#0e2817);border-color:#6df08e;color:#fff;box-shadow:0 0 0 1px #6df08e33}.ownership-icon{width:38px;height:38px;display:grid;place-items:center;border-radius:10px;background:#10251a;color:#6df08e;font-weight:950;font-size:20px}.ownership-option b{display:block;font-size:12px;letter-spacing:.08em}.ownership-option small{display:block;margin-top:3px;color:#8fa797;font-size:10px}.ownership-hidden{display:none}@media(max-width:600px){.ownership-banner{grid-template-columns:1fr}.ownership-option{padding:12px}}'''
-          s=s.replace('</style>',css+'</style>',1)
-          marker='''function formPlant(id=''){'''
-          inject='''function setOwnerType(type){const sel=$(\'f_owner\');if(!sel)return;sel.value=type;document.querySelectorAll(\'.ownership-option\').forEach(b=>b.classList.toggle(\'active\',b.dataset.owner===type));const sale=$(\'f_sale\');if(sale){sale.disabled=type!==\'Sale\';if(type!==\'Sale\')sale.value=0}}\n'''
-          s=s.replace(marker,inject+marker,1)
-          old_init="if($('f_owner'))$('f_owner').onchange=()=>{const sale=$('f_owner').value==='Sale';$('f_sale').disabled=!sale;if(!sale)$('f_sale').value=0};if($('f_owner'))$('f_owner').dispatchEvent(new Event('change'))"
-          new_init="if($('f_owner'))$('f_owner').onchange=()=>setOwnerType($('f_owner').value);if($('f_owner'))setOwnerType($('f_owner').value)"
-          if old_init not in s:
-            raise SystemExit('owner init not found')
-          s=s.replace(old_init,new_init,1)
+          if 'ownership-banner{' not in s:
+            s=s.replace('</style>',css+'</style>',1)
+          if 'function setOwnerType(type)' not in s:
+            marker="function formPlant(id=''){"
+            inject="function setOwnerType(type){const sel=$(\'f_owner\');if(!sel)return;sel.value=type;document.querySelectorAll(\'.ownership-option\').forEach(b=>b.classList.toggle(\'active\',b.dataset.owner===type));const sale=$(\'f_sale\');if(sale){sale.disabled=type!==\'Sale\';if(type!==\'Sale\')sale.value=0}}"
+            s=s.replace(marker,inject+marker,1)
+          s=s.replace("window.setOwnerChoice=function(v){$('f_owner').value=v;document.querySelectorAll('.owner-card').forEach(b=>b.classList.toggle('selected',b.dataset.owner===v));const sale=v==='Sale';$('f_sale').disabled=!sale;if(!sale)$('f_sale').value=0};if($('f_owner'))$('f_owner').onchange=()=>setOwnerChoice($('f_owner').value);setOwnerChoice($('f_owner').value)","if($('f_owner'))$('f_owner').onchange=()=>setOwnerType($('f_owner').value);if($('f_owner'))setOwnerType($('f_owner').value)")
           p.write_text(s,encoding='utf-8')
-      - name: Commit app
+      - name: Commit app and remove patch workflow
+        shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add app-v4.html
-          git diff --cached --quiet || git commit -m 'Move personal or sale choice to top banner'
-          git push
-      - name: Remove patch workflow
-        shell: bash
-        run: |
+          git diff --cached --quiet || git commit -m 'Move plant type to top banner'
           git rm .github/workflows/patch-ownership-banner.yml
-          git commit -m 'Remove temporary ownership banner patch workflow'
+          git commit -m 'Remove temporary ownership banner workflow'
           git push
